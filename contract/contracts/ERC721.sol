@@ -1,5 +1,6 @@
 pragma solidity ^0.8.26;
 
+import {IERC721Metadata} from "./interfaces/IERC721Metadata.sol";
 import {IERC721} from "./interfaces/IERC721.sol";
 import {ERC165} from "./ERC165.sol";
 import {Address} from "./utils/Address.sol";
@@ -10,14 +11,14 @@ import {Address} from "./utils/Address.sol";
 // IERC721Receiver : https://github.com/binodnp/openzeppelin-solidity/blob/master/contracts/token/ERC721/IERC721Receiver.sol
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-contract ERC721 is IERC721, ERC165 {
+abstract contract ERC721 is IERC721, ERC165 {
     // *********************************************************** INIT
     using Address for address;
 
     bytes4 private constant _ERC721_RECEIVED = 0x150b7a02;
 
     // ownership
-    mapping(address owner => uint256 count) _ownerCounts;
+    mapping(address owner => uint256 count) internal _ownerCounts;
     mapping(uint256 tokenId => address owner) internal _tokenOwners;
     // approvals
     mapping(uint256 tokenId => address operator) internal _tokenApprovals;
@@ -36,11 +37,6 @@ contract ERC721 is IERC721, ERC165 {
     // ---------------------------------- Modifiers
     modifier fromIsNotTo(address _from, address _to) {
         if (_from == _to) revert FromIsTo(_from, _to);
-        _;
-    }
-
-    modifier addressIsValid(address _addr) {
-        if (_addr == address(0)) revert InvalidAddress(_addr);
         _;
     }
 
@@ -73,19 +69,40 @@ contract ERC721 is IERC721, ERC165 {
         _;
     }
 
-    modifier _destinationSafety(address _from, address _to, uint256 _tokenId, bytes calldata _data) {
-        if (!_to.isContract()) {
-            if (IERC721Receiver(_to).onERC721Received(msg.sender, _from, _tokenId, _data) != _ERC721_RECEIVED) revert DestinationNotSafe(_to);
-        }
+    modifier addressIsNotZero(address _addr) {
+        if (_addr == address(0)) revert InvalidAddress(_addr);
         _;
     }
 
     // ---------------------------------- Functions
-    function _transfer(address _from, address _to, uint256 _tokenId) internal virtual {
-        _ownerCounts[_from]--;
-        _ownerCounts[_to]++;
-        _tokenOwners[_tokenId] = _to;
+      function _destinationSafety(address _from, address _to, uint256 _tokenId, bytes calldata _data) internal {
+        if (!_to.isContract()) {
+            if (IERC721Receiver(_to).onERC721Received(msg.sender, _from, _tokenId, _data) != _ERC721_RECEIVED) revert DestinationNotSafe(_to);
+        }
+    }
+
+    function _update(address _from, address _to, uint256 _tokenId) internal virtual {
+        if (_from != address(0)) {
+            _ownerCounts[_from]--;
+        }
+        if (_to != address(0)) {   
+            _ownerCounts[_to]++;
+            _tokenOwners[_tokenId] = _to;
+        }
         delete _tokenApprovals[_tokenId];
+    }
+
+    function _mint(address _to, uint256 _tokenId) internal virtual addressIsNotZero(_to) {
+        _update(address(0), _to, _tokenId);
+    }
+
+    function _safeMint(address _to, uint256 _tokenId, bytes calldata _data) internal virtual addressIsNotZero(_to) {
+        _destinationSafety(msg.sender, _to, _tokenId, _data);
+        _update(address(0), _to, _tokenId);
+    }
+
+    function _safeMint(address _to, uint256 _tokenId) internal virtual addressIsNotZero(_to) {
+        _safeMint(_to, _tokenId);
     }
 
     // =========================================================== PUBLIC
@@ -97,7 +114,8 @@ contract ERC721 is IERC721, ERC165 {
     }
 
     // IERC721 implementation
-    function balanceOf(address _owner) external view addressIsValid(_owner) returns (uint256) {
+    function balanceOf(address _owner) public view addressIsNotZero(_owner) returns (uint256)
+     {
         return _ownerCounts[_owner];
     }
 
@@ -111,13 +129,14 @@ contract ERC721 is IERC721, ERC165 {
     external
     payable 
     tokenExists(_tokenId)
-    addressIsValid(_from)
-    addressIsValid(_to) 
     fromIsNotTo(_from, _to)
+    addressIsNotZero(_from)
+    addressIsNotZero(_to)
     tokenIsFrom(_tokenId, _from)
     operatorIsAuthorizedForTransfer(_tokenId)
-    _destinationSafety(_from, _to, _tokenId, _data) {
-        _transfer(_from, _to, _tokenId);
+     {
+        _destinationSafety(_from, _to, _tokenId, _data);
+        _update(_from, _to, _tokenId);
     }
 
     // IERC721 implementation
@@ -130,20 +149,20 @@ contract ERC721 is IERC721, ERC165 {
     external
     payable 
     tokenExists(_tokenId)
-    addressIsValid(_from)
-    addressIsValid(_to) 
     fromIsNotTo(_from, _to)
+    addressIsNotZero(_from)
+    addressIsNotZero(_to)
     tokenIsFrom(_tokenId, _from)
     operatorIsAuthorizedForTransfer(_tokenId) {
-        _transfer(_from, _to, _tokenId);
+        _update(_from, _to, _tokenId);
     }
 
     // IERC721 implementation
     function approve(address _operator, uint256 _tokenId)
     external
     payable 
-    addressIsValid(_operator) 
     tokenExists(_tokenId) 
+    addressIsNotZero(_operator)
     operatorIsAuthorizedForApproval(_tokenId) {
         _tokenApprovals[_tokenId] = _operator;
     }
@@ -151,7 +170,8 @@ contract ERC721 is IERC721, ERC165 {
     // IERC721 implementation
     function setApprovalForAll(address _operator, bool _approved)
     external
-    addressIsValid(_operator) {
+    addressIsNotZero(_operator)
+    {
         _ownerOperators[msg.sender][_operator] = _approved;
     }
 
@@ -168,8 +188,8 @@ contract ERC721 is IERC721, ERC165 {
     function isApprovedForAll(address _owner, address _operator)
     external
     view
-    addressIsValid(_owner) 
-    addressIsValid(_operator) 
+    addressIsNotZero(_owner)
+    addressIsNotZero(_operator)
     returns (bool) {
         return _ownerOperators[_owner][_operator];
     }
