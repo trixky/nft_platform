@@ -2,7 +2,8 @@ pragma solidity ^0.8.26;
 
 import {IERC721Metadata} from "./interfaces/IERC721Metadata.sol";
 import {ERC721} from "./ERC721.sol";
-import {ERC165} from "./ERC165.sol";
+import {IERC165} from "./interfaces/IERC165.sol";
+import {IERC721} from "./interfaces/IERC721.sol";
 import {Address} from "./utils/Address.sol";
 
 // https://github.com/ethereum/ercs/blob/master/ERCS/erc-721.md
@@ -11,7 +12,7 @@ import {Address} from "./utils/Address.sol";
 // IERC721Receiver : https://github.com/binodnp/openzeppelin-solidity/blob/master/contracts/token/ERC721/IERC721Receiver.sol
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-contract ERC721Metadata is ERC721, IERC721Metadata {
+abstract contract ERC721Metadata is ERC721, IERC721Metadata {
     string private _name;
     string private _symbol;
     string private _baseURI;
@@ -49,9 +50,9 @@ contract ERC721Metadata is ERC721, IERC721Metadata {
     /**
      * @dev Returns the Uniform Resource Identifier (URI) for `tokenId` token.
      */
-    function tokenURI(uint256 tokenId) external virtual view tokenExists(tokenId) returns (string memory) {
+    function tokenURI(uint256 _tokenId) external virtual view tokenExists(_tokenId) returns (string memory) {
         string memory baseURI = _getBaseURI();
 
-        return string(abi.encodePacked(baseURI, tokenId, ".json"));
+        return string(abi.encodePacked(baseURI, _tokenId, ".json"));
     }
 }

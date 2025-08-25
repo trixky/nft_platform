@@ -6,7 +6,6 @@ pragma solidity ^0.8.24;
 // from : https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC721/extensions/ERC721Burnable.sol
 
 import {IERC721Enumerable} from "./interfaces/IERC721Enumerable.sol";
-import {ERC165} from "./ERC165.sol";
 import {ERC721} from "./ERC721.sol";
 
 /**
@@ -47,7 +46,17 @@ contract ERC721Enumerable is ERC721, IERC721Enumerable {
     function _update(address _from, address _to, uint256 _tokenId) internal override virtual {
         super._update(_from, _to, _tokenId);
 
-        
+        if (_from == address(0)) {
+            _addTokenToAllTokensEnumeration(_tokenId);
+        } else if (_from != _to) {
+            _removeTokenFromOwnerEnumeration(_from, _tokenId);
+        }
+
+        if (_to == address(0)) {
+            _removeTokenFromAllEnumeration(_tokenId);
+        } else if (_from != _to) {
+            _addTokenToOwnerEnumeration(_to, _tokenId);
+        }
     }
 
     /**
@@ -56,5 +65,49 @@ contract ERC721Enumerable is ERC721, IERC721Enumerable {
      */
     function tokenByIndex(uint256 index) external view returns (uint256) {
 
+    }
+
+    // =========================================== private (for the _update override)
+    function _addTokenToOwnerEnumeration(address _to, uint256 _tokenId) private {
+        uint256 length = balanceOf(_to) - 1;
+        _ownedTokens[_to][length] = _tokenId;
+        _ownedTokensIndex[_tokenId] = length;
+    }
+
+    function _addTokenToAllTokensEnumeration(uint256 _tokenId) private {
+        _allTokensIndex[_tokenId] = _allTokens.length;
+        _allTokens.push(_tokenId);
+    }
+
+    function _removeTokenFromOwnerEnumeration(address _from, uint256 _tokenId) private {
+        uint256 lastTokenIndex = balanceOf(_from);
+        uint256 tokenIndex = _ownedTokensIndex[_tokenId];
+
+        mapping(uint256 index => uint256) storage _ownedTokensByOwner = _ownedTokens[_from];
+
+        if (tokenIndex != lastTokenIndex) {
+            // swap only if the token index is not the last one
+            uint256 lastTokenId = _ownedTokensByOwner[lastTokenIndex];
+
+            _ownedTokensByOwner[tokenIndex] = lastTokenId;
+            _ownedTokensIndex[lastTokenId] = tokenIndex;
+        }
+
+        delete _ownedTokensIndex[_tokenId];
+        delete _ownedTokensByOwner[lastTokenIndex];
+    }
+
+    function _removeTokenFromAllEnumeration(uint256 _tokenId) private {
+        uint256 lastTokenIndex = _allTokens.length - 1;
+        uint256 tokenIndex = _allTokensIndex[_tokenId];
+
+        uint256 lastTokenId = _allTokens[lastTokenIndex];
+
+        // swap in any case because the "if" case is rare (gas optimization)
+        _allTokens[tokenIndex] = lastTokenId; // swap
+        _allTokensIndex[lastTokenId] = tokenIndex; // swap
+
+        delete _allTokensIndex[_tokenId];
+        _allTokens.pop();
     }
 }
